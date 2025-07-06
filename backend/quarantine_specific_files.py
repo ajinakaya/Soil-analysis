@@ -88,6 +88,7 @@ if __name__ == "__main__":
         r"D:\soil-analyzer-project\Dataset\Train\Red soil\red-soil-1.gif"
     ]
 
+
     quarantine_files_from_list(problematic_files)
 
     print("\nPart 2 (Specific File Quarantine) is complete.")
