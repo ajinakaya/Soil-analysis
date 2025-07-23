@@ -5,3 +5,4 @@ venv/
 
 # Ignore model file
 soil_model.h5
+multi_task_soil_model.h5
