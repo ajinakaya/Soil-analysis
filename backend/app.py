@@ -6,7 +6,6 @@ import numpy as np
 from PIL import Image 
 import io 
 import datetime
-
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -21,7 +20,7 @@ CLASS_NAMES_PATH = 'soil_classes.txt'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'} 
 MODEL_INPUT_SHAPE = (224, 224, 3) 
 UPLOAD_FOLDER = 'uploads' 
-# --- END CONFIGURATION ---
+
 
 model = None
 SOIL_CLASSES = [] 
@@ -83,7 +82,7 @@ def home():
 
 @app.route('/predict', methods=['POST'])
 def predict():
-   
+    
     if model is None:
         return jsonify({"error": "AI model not loaded on server. Server setup issue."}), 500
 
@@ -115,8 +114,56 @@ def predict():
             predicted_class_idx = np.argmax(soil_type_predictions, axis=1)[0]
             confidence = float(soil_type_predictions[0][predicted_class_idx])
             predicted_soil_type = SOIL_CLASSES[predicted_class_idx]
+            
+           
+            if predicted_soil_type == 'Not soil':
+                predicted_pH = None 
+                soil_quality = "Not a soil sample"
+                recommendations = "This image does not appear to be a soil sample. Please upload an image of soil for analysis."
+            else:
+                # Use the model's pH prediction only if it's a soil type
+                predicted_pH = float(pH_predictions[0][0])
+                is_pH_good = 6.0 <= predicted_pH <= 6.8
+                
+                # Determine soil quality based on soil type and pH
+                if predicted_soil_type == 'Alluvial soil' and is_pH_good:
+                    soil_quality = "Excellent"
+                elif predicted_soil_type == 'Alluvial soil':
+                    soil_quality = "Good" # Alluvial is good, but pH is off
+                elif predicted_soil_type == 'Black Soil' and is_pH_good:
+                    soil_quality = "Good" # pH helps make it good
+                elif predicted_soil_type == 'Black Soil':
+                    soil_quality = "Okay"
+                elif predicted_soil_type == 'Clay soil' and is_pH_good:
+                    soil_quality = "Okay" # pH is good, but drainage is still a challenge
+                elif predicted_soil_type == 'Clay soil':
+                    soil_quality = "Challenging"
+                elif predicted_soil_type == 'Red soil' and is_pH_good:
+                    soil_quality = "Okay"
+                elif predicted_soil_type == 'Red soil':
+                    soil_quality = "Challenging"
+                else:
+                    soil_quality = "Unknown"
 
-            predicted_pH = float(pH_predictions[0][0])
+                # Generate recommendations based on the actual soil type
+                recommendations = ""
+                if predicted_soil_type == 'Alluvial soil':
+                    recommendations = "Alluvial soil is typically fertile and good for tomatoes. Ensure consistent moisture and balanced nutrients. Good drainage is key."
+                    if not is_pH_good:
+                        recommendations += f" However, the pH level of {round(predicted_pH, 2)} is outside the ideal range (6.0-6.8). You may need to adjust it."
+                elif predicted_soil_type == 'Black Soil':
+                    recommendations = "Black soil is rich in clay and organic matter, holding water well. Ensure good aeration to prevent waterlogging. Calcium supplementation can be beneficial for tomato quality."
+                    if not is_pH_good:
+                        recommendations += f" The pH level of {round(predicted_pH, 2)} is outside the ideal range (6.0-6.8), which may require adjustment."
+                elif predicted_soil_type == 'Clay soil':
+                    recommendations = "Clay soil can become compacted and has poor drainage. Amend with plenty of organic matter (compost) and consider gypsum to improve structure and drainage. Focus on consistent watering to avoid cracking."
+                    if not is_pH_good:
+                        recommendations += f" The pH level of {round(predicted_pH, 2)} is outside the ideal range (6.0-6.8), which may require adjustment."
+                elif predicted_soil_type == 'Red soil':
+                    recommendations = "Red soil can be acidic and often lacks organic matter. Add lime to raise pH if needed (target 6.0-6.8). Incorporate organic compost to improve fertility and water retention. Monitor phosphorus and iron levels."
+                    if not is_pH_good:
+                        recommendations += f" The pH level of {round(predicted_pH, 2)} is outside the ideal range (6.0-6.8), which may require adjustment."
+          
 
             confidence_scores_dict = {
                 soil_class: float(score) * 100
@@ -132,54 +179,14 @@ def predict():
                 SOIL_CLASSES,
                 save_path=chart_save_path
             )
-            soil_quality = "Unknown"
             
-            # Check if pH is within the ideal range (6.0-6.8)
-            is_pH_good = 6.0 <= predicted_pH <= 6.8
-            
-            if predicted_soil_type == 'Alluvial soil' and is_pH_good:
-                soil_quality = "Excellent"
-            elif predicted_soil_type == 'Alluvial soil':
-                soil_quality = "Good" # Alluvial is good, but pH is off
-            elif predicted_soil_type == 'Black Soil' and is_pH_good:
-                soil_quality = "Good" # pH helps make it good
-            elif predicted_soil_type == 'Black Soil':
-                soil_quality = "Okay"
-            elif predicted_soil_type == 'Clay soil' and is_pH_good:
-                soil_quality = "Okay" # pH is good, but drainage is still a challenge
-            elif predicted_soil_type == 'Clay soil':
-                soil_quality = "Challenging"
-            elif predicted_soil_type == 'Red soil' and is_pH_good:
-                soil_quality = "Okay"
-            elif predicted_soil_type == 'Red soil':
-                soil_quality = "Challenging"
-            else:
-                soil_quality = "Unknown"
-      
-            recommendations = ""
-            if predicted_soil_type == 'Alluvial soil':
-                recommendations = "Alluvial soil is typically fertile and good for tomatoes. Ensure consistent moisture and balanced nutrients. Good drainage is key."
-                if not is_pH_good:
-                    recommendations += f" However, the pH level of {round(predicted_pH, 2)} is outside the ideal range (6.0-6.8). You may need to adjust it."
-            elif predicted_soil_type == 'Black Soil':
-                recommendations = "Black soil is rich in clay and organic matter, holding water well. Ensure good aeration to prevent waterlogging. Calcium supplementation can be beneficial for tomato quality."
-                if not is_pH_good:
-                    recommendations += f" The pH level of {round(predicted_pH, 2)} is outside the ideal range (6.0-6.8), which may require adjustment."
-            elif predicted_soil_type == 'Clay soil':
-                recommendations = "Clay soil can become compacted and has poor drainage. Amend with plenty of organic matter (compost) and consider gypsum to improve structure and drainage. Focus on consistent watering to avoid cracking."
-                if not is_pH_good:
-                    recommendations += f" The pH level of {round(predicted_pH, 2)} is outside the ideal range (6.0-6.8), which may require adjustment."
-            elif predicted_soil_type == 'Red soil':
-                recommendations = "Red soil can be acidic and often lacks organic matter. Add lime to raise pH if needed (target 6.0-6.8). Incorporate organic compost to improve fertility and water retention. Monitor phosphorus and iron levels."
-                if not is_pH_good:
-                    recommendations += f" The pH level of {round(predicted_pH, 2)} is outside the ideal range (6.0-6.8), which may require adjustment."
-            else:
-                recommendations = "Soil characteristics can vary. General recommendations for tomatoes: Maintain soil pH between 6.0 and 6.8. Provide balanced nutrition, especially nitrogen for leaves and potassium for fruit development. Ensure consistent watering."
-            
+            # Conditionally format pH value for the response
+            pH_response_value = round(predicted_pH, 2) if predicted_pH is not None else "N/A"
+
             return jsonify({
                 "predicted_soil_type": predicted_soil_type,
                 "confidence": round(confidence * 100, 2),
-                "predicted_pH": round(predicted_pH, 2),
+                "predicted_pH": pH_response_value,
                 "soil_quality": soil_quality,
                 "recommendations": recommendations,
                 "timestamp": np.datetime_as_string(np.datetime64('now')),
@@ -193,5 +200,6 @@ def predict():
     else:
         return jsonify({"error": "Invalid file type. Please upload a PNG, JPG, JPEG, or GIF image."}), 400
 
+
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5000)
